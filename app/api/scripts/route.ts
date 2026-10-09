@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { listScripts, saveScript } from '@/lib/github-storage';
@@ -8,16 +9,23 @@ import { escapeHtml, sendTelegramMessage, sendTelegramPhoto } from '@/lib/telegr
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-const MAX_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 3_500_000);
+const MAX_BYTES = Math.min(Number(process.env.MAX_UPLOAD_BYTES || 2_800_000), 2_800_000);
 export async function GET() {
   try { const scripts = await listScripts(); return NextResponse.json({ scripts: scripts.map(toPublicScript), totalDownloads: scripts.reduce((sum, s) => sum + (s.downloads || 0), 0) }, { headers: { 'Cache-Control': 'no-store' } }); }
   catch (error) { return jsonError(safeError(error), 503); }
 }
 export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID();
+  console.info(`[FX Project] upload request started id=${requestId} contentLength=${request.headers.get('content-length') || 'unknown'} contentType=${request.headers.get('content-type') || 'unknown'}`);
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  if (!allowRequest(`upload:${forwarded}`, 5, 60_000)) return jsonError('Terlalu banyak upload dari koneksi ini. Coba lagi satu menit lagi.', 429);
+  if (!allowRequest(`upload:${forwarded}`, 5, 60_000)) { console.warn(`[FX Project] upload rate limited id=${requestId}`); return NextResponse.json({ error: 'Terlalu banyak upload dari koneksi ini. Coba lagi satu menit lagi.', requestId }, { status: 429 }); }
   try {
-    const form = await request.formData();
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (contentLength > 4_000_000) return NextResponse.json({ error: 'Request terlalu besar. Coba ZIP di bawah 2,8 MB dan thumbnail di bawah 300 KB.', requestId }, { status: 413 });
+    let form: FormData;
+    try { form = await request.formData(); }
+    catch (parseError) { console.error(`[FX Project] upload form parse failed id=${requestId}`, parseError); return NextResponse.json({ error: 'Form upload tidak dapat dibaca server. Coba ZIP lebih kecil dan pilih ulang file.', requestId }, { status: 400 }); }
+    console.info(`[FX Project] upload form parsed id=${requestId}`);
     const file = form.get('file'); const thumbnailFile = form.get('thumbnail'); const name = String(form.get('name') || '').trim(); const description = String(form.get('description') || '').trim(); const author = String(form.get('author') || '').trim(); const password = String(form.get('password') || '');
     if (!(file instanceof File)) return jsonError('File ZIP wajib dipilih.');
     if (!name || name.length < 2 || name.length > 70) return jsonError('Nama script harus 2–70 karakter.');
@@ -35,11 +43,11 @@ export async function POST(request: NextRequest) {
       const allowedTypes: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
       const extension = allowedTypes[thumbnailFile.type];
       if (!extension) return jsonError('Thumbnail harus JPG, PNG, atau WEBP.');
-      if (thumbnailFile.size > 700_000) return jsonError('Ukuran thumbnail maksimal 700 KB.');
+      if (thumbnailFile.size > 300_000) return NextResponse.json({ error: 'Ukuran thumbnail maksimal 300 KB agar request tidak melewati batas Vercel.', requestId }, { status: 400 });
       thumbnail = { bytes: Buffer.from(await thumbnailFile.arrayBuffer()), type: thumbnailFile.type, extension };
     }
     const passwordHash = password ? await bcrypt.hash(password, 12) : null;
-    const script = await saveScript(bytes, { name, description, author, passwordProtected: Boolean(password), passwordHash }, thumbnail);
+    console.info(`[FX Project] validating complete id=${requestId} zipBytes=${bytes.length} thumbnailBytes=${thumbnail?.bytes.length || 0}`);\n    const script = await saveScript(bytes, { name, description, author, passwordProtected: Boolean(password), passwordHash }, thumbnail);\n    console.info(`[FX Project] storage saved id=${requestId} scriptId=${script.id}`);
     // Upload must succeed even if Telegram is temporarily unavailable.
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
     const scriptUrl = siteUrl ? `${siteUrl}/scripts/${script.id}` : `/scripts/${script.id}`;

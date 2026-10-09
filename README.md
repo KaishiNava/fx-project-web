@@ -41,7 +41,7 @@ Redeploy after saving environment variables.
 5. Upload another script with a password and test both incorrect and correct passwords.
 
 ## Limits and security notes
-- The upload is capped at about 3.5 MB because standard Vercel serverless request bodies have limits. Larger uploads should use direct-to-storage uploads or a dedicated object store.
+- The upload is capped at about 2.8 MB because standard Vercel serverless request bodies have limits. Larger uploads should use direct-to-storage uploads or a dedicated object store.
 - Basic ZIP signature validation is not malware scanning and does not protect against ZIP bombs. Only distribute trusted files.
 - The in-memory rate guard is best-effort only; serverless instances do not share memory. Before opening uploads to the public, add persistent edge/WAF rate limiting and abuse controls.
 - GitHub Contents API + one JSON metadata file is suitable for a small project, not high concurrency. Concurrent metadata changes can still race; use a database/object store for a larger community.
@@ -69,7 +69,11 @@ Security note: notifications intentionally **never include the original download
 The Telegram notification is best-effort: if Telegram is temporarily unavailable, an upload that has already been saved will still succeed. The in-memory rate limiter is also only a light per-instance guard; configure a persistent rate limit/WAF before opening the public upload/report forms widely.
 
 ## Thumbnail script
-Uploader dapat menambahkan thumbnail opsional JPG, PNG, atau WEBP (maksimal 700 KB). Gambar disimpan di repository storage pada folder `thumbnails/`, lalu ditampilkan pada kartu library/detail melalui endpoint thumbnail website. Jika `NEXT_PUBLIC_SITE_URL` benar, notifikasi upload Telegram menggunakan foto thumbnail sebagai cover; jika tidak ada thumbnail, bot mengirim pesan teks.
+Uploader dapat menambahkan thumbnail opsional JPG, PNG, atau WEBP (maksimal 300 KB). Gambar disimpan di repository storage pada folder `thumbnails/`, lalu ditampilkan pada kartu library/detail melalui endpoint thumbnail website. Jika `NEXT_PUBLIC_SITE_URL` benar, notifikasi upload Telegram menggunakan foto thumbnail sebagai cover; jika tidak ada thumbnail, bot mengirim pesan teks.
 
 ## Telegram
 Laporan dan upload memakai `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`. Pesan upload memuat ID, nama, author, deskripsi, ukuran, status proteksi password (bukan password aslinya), waktu, dan tautan. Password asli tidak pernah dikirim ke Telegram.
+
+
+## Upload diagnostics update
+The publish form now reads API responses defensively and shows HTTP status/request ID when the server responds with an error. The upload API writes request-phase diagnostics to Vercel Runtime Logs without logging file contents or credentials. For compatibility with Vercel request-body limits, the default ZIP cap is 2.8 MB and thumbnail cap is 300 KB. Set `MAX_UPLOAD_BYTES` no higher than `2800000`.
