@@ -1,0 +1,20 @@
+'use client';
+import Link from 'next/link';
+import { FormEvent, useState } from 'react';
+
+const categories = ['Script bermasalah', 'File berbahaya', 'Pelanggaran hak cipta', 'Bug website', 'Lainnya'];
+export default function ReportPage() {
+  const [category, setCategory] = useState(categories[0]);
+  const [target, setTarget] = useState(''); const [contact, setContact] = useState(''); const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [done, setDone] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      const res = await fetch('/api/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ category, target, contact, message, website: '' }) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Gagal mengirim laporan.'); setDone(true);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Gagal mengirim laporan.'); }
+    finally { setBusy(false); }
+  }
+  return <main className="page-wrap report-page"><div className="breadcrumb"><Link href="/">← BACK TO LIBRARY</Link><span> / </span><strong>REPORT CENTER</strong></div><section className="report-layout"><div className="report-intro"><div className="eyebrow dark-eyebrow">HELP KEEP THE COMMUNITY SAFE <span className="eyebrow-num">003 / REPORT</span></div><h1>SEE<br/>SOMETHING?<br/><span className="highlight">SAY IT.</span></h1><p>Temukan file mencurigakan, script rusak, atau pelanggaran? Kirim laporan. Pesan akan diteruskan otomatis ke admin FX Project melalui Telegram.</p><div className="report-note"><span>!</span><div><strong>LAPORKAN DENGAN JELAS</strong><small>Sertakan ID atau tautan script jika tersedia. Jangan kirim password akun atau data pribadi.</small></div></div><div className="report-stamp">REPORT<br/><span>IT</span></div></div>
+  <div className="form-panel">{done ? <div className="success-panel report-success"><div className="success-icon">✓</div><div className="eyebrow">REPORT SENT</div><h2>THANKS FOR<br/><span>SPEAKING UP.</span></h2><p>Laporan berhasil dikirim ke admin. Terima kasih sudah membantu menjaga komunitas.</p><Link href="/" className="button button-primary full-button">KEMBALI KE LIBRARY ↗</Link><button className="reset-link report-again" onClick={() => { setDone(false); setMessage(''); setTarget(''); setContact(''); }}>KIRIM LAPORAN LAIN</button></div> : <form onSubmit={submit} className="upload-form"><div className="form-header"><div><span className="eyebrow dark-eyebrow">REPORT A PROBLEM</span><h2>WHAT'S <span>WRONG?</span></h2></div><span className="required-badge">PRIVATE FORM</span></div><label className="field-label">REPORT CATEGORY <span>*</span><select required value={category} onChange={e => setCategory(e.target.value)}>{categories.map(item => <option key={item}>{item}</option>)}</select></label><label className="field-label">SCRIPT ID / LINK <small>OPTIONAL</small><input maxLength={180} value={target} onChange={e => setTarget(e.target.value)} placeholder="Contoh: fx_a1b2c3 atau tautan script" /></label><label className="field-label">CONTACT <small>OPTIONAL</small><input maxLength={100} value={contact} onChange={e => setContact(e.target.value)} placeholder="Username Telegram / email (opsional)" /></label><label className="field-label">DETAIL LAPORAN <span>*</span><textarea required minLength={10} maxLength={1500} rows={6} value={message} onChange={e => setMessage(e.target.value)} placeholder="Jelaskan masalahnya dengan detail (minimal 10 karakter)..." /></label>{error && <div className="form-error">! {error}</div>}<button type="submit" className="button button-primary full-button" disabled={busy}>{busy ? <><span className="button-spinner"/> MENGIRIM LAPORAN...</> : <>KIRIM LAPORAN <span>↗</span></>}</button><p className="form-disclaimer">Laporan diteruskan ke admin melalui Telegram. Hindari menyertakan informasi rahasia.</p></form>}</div></section></main>
+}
