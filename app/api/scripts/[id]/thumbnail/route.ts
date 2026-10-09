@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const script = await getScript(params.id);
-    if (!script?.thumbnailPath) return new NextResponse(null, { status: 404 });
+    if (!script || (!script.thumbnailPath && !script.thumbnailUrl)) return new NextResponse(null, { status: 404 });
+    if (script.thumbnailUrl) return NextResponse.redirect(script.thumbnailUrl, { status: 302, headers: { 'Cache-Control': 'public, max-age=3600, s-maxage=86400' } });
     const thumb = await getThumbnail(script.thumbnailPath);
     if (!thumb) return new NextResponse(null, { status: 404 });
     return new NextResponse(new Uint8Array(thumb.bytes), { headers: { 'Content-Type': thumb.type, 'Cache-Control': 'public, max-age=3600, s-maxage=86400', 'X-Content-Type-Options': 'nosniff' } });

@@ -6,6 +6,7 @@ export type ScriptRecord = {
   file: string;
   thumbnailPath: string | null;
   thumbnailType: string | null;
+  thumbnailUrl?: string | null;
   size: number;
   downloads: number;
   passwordProtected: boolean;

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { listScripts, saveScript } from '@/lib/github-storage';
+import { uploadThumbnailToZFile } from '@/lib/zfile';
 import { toPublicScript } from '@/lib/types';
 import { jsonError, safeError } from '@/lib/http';
 import { allowRequest } from '@/lib/ratelimit';
@@ -63,7 +64,8 @@ export async function POST(request: NextRequest) {
         console.warn(`[FX Project] invalid thumbnail signature id=${requestId} name=${thumbnailFile.name} type=${thumbnailFile.type} bytes=${thumbnailBytes.length}`);
         return NextResponse.json({ error: 'Thumbnail tidak terbaca sebagai JPG, PNG, atau WEBP yang valid. Pilih ulang gambar asli.', requestId }, { status: 400 });
       }
-      thumbnail = { bytes: thumbnailBytes, type, extension };
+      const zfileUrl = await uploadThumbnailToZFile(thumbnailBytes, `fx-thumbnail.${extension}`, type);
+      thumbnail = { bytes: thumbnailBytes, type, extension, url: zfileUrl };
       console.info(`[FX Project] thumbnail validated id=${requestId} type=${type} bytes=${thumbnailBytes.length}`);
     }
     const passwordHash = password ? await bcrypt.hash(password, 12) : null;
@@ -84,11 +86,11 @@ export async function POST(request: NextRequest) {
       `<b>Password download:</b> ${script.passwordProtected ? 'YA (disimpan sebagai hash; password asli tidak dikirim)' : 'TIDAK'}`,
       `<b>Jumlah download:</b> ${script.downloads}`,
       `<b>Waktu upload:</b> ${escapeHtml(script.createdAt)}`,
-      `<b>Thumbnail:</b> ${script.thumbnailPath ? 'Tersedia' : 'Tidak ada'}`,
+      `<b>Thumbnail:</b> ${(script.thumbnailPath || script.thumbnailUrl) ? 'Tersedia' : 'Tidak ada'}`,
       `<b>Link:</b> ${escapeHtml(scriptUrl)}`
     ].join('\n');
     try {
-      const thumbUrl = script.thumbnailPath && siteUrl ? `${siteUrl}/api/scripts/${script.id}/thumbnail` : '';
+      const thumbUrl = (script.thumbnailPath || script.thumbnailUrl) && siteUrl ? `${siteUrl}/api/scripts/${script.id}/thumbnail` : '';
       if (thumbUrl) await sendTelegramPhoto(thumbUrl, notification.slice(0, 1000));
       else await sendTelegramMessage(notification);
     }

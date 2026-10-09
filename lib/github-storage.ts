@@ -77,7 +77,7 @@ export async function getScript(id: string): Promise<ScriptRecord | null> {
   return (await listScripts()).find(script => script.id === id) || null;
 }
 
-export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' | 'description' | 'author' | 'passwordProtected' | 'passwordHash'>, thumbnail?: { bytes: Buffer; type: string; extension: string }): Promise<ScriptRecord> {
+export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' | 'description' | 'author' | 'passwordProtected' | 'passwordHash'>, thumbnail?: { bytes: Buffer; type: string; extension: string; url?: string }): Promise<ScriptRecord> {
   const c = config();
   const id = crypto.randomBytes(6).toString('hex');
   const filePath = `scripts/${id}.zip`;
@@ -87,9 +87,14 @@ export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' |
   console.info(`[FX Project] storage ZIP uploaded id=${id}`);
   let thumbnailPath: string | null = null;
   let thumbnailType: string | null = null;
+  let thumbnailUrl: string | null = null;
   if (thumbnail) {
-    thumbnailPath = `thumbnails/${id}.${thumbnail.extension}`;
     thumbnailType = thumbnail.type;
+    if (thumbnail.url) {
+      thumbnailUrl = thumbnail.url;
+      console.info(`[FX Project] ZFile thumbnail registered id=${id} url=${thumbnail.url}`);
+    } else {
+    thumbnailPath = `thumbnails/${id}.${thumbnail.extension}`;
     console.info(`[FX Project] storage uploading thumbnail id=${id} path=${thumbnailPath} bytes=${thumbnail.bytes.length} type=${thumbnail.type}`);
     try {
       await github(thumbnailPath, { method: 'PUT', body: JSON.stringify({ message: `FX Project: thumbnail ${id}`, content: thumbnail.bytes.toString('base64'), branch: c.branch }) });
@@ -98,8 +103,9 @@ export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' |
       console.error(`[FX Project] storage thumbnail upload failed id=${id}`, error);
       throw error;
     }
+    }
   }
-  const record: ScriptRecord = { ...meta, id, file: filePath, thumbnailPath, thumbnailType, size: file.length, downloads: 0, createdAt: new Date().toISOString() };
+  const record: ScriptRecord = { ...meta, id, file: filePath, thumbnailPath, thumbnailType, thumbnailUrl, size: file.length, downloads: 0, createdAt: new Date().toISOString() };
   try {
     await updateMetadata(records => [record, ...records], `FX Project: register ${id}`);
   } catch (error) {
