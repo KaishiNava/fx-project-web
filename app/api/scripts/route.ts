@@ -47,7 +47,9 @@ export async function POST(request: NextRequest) {
       thumbnail = { bytes: Buffer.from(await thumbnailFile.arrayBuffer()), type: thumbnailFile.type, extension };
     }
     const passwordHash = password ? await bcrypt.hash(password, 12) : null;
-    console.info(`[FX Project] validating complete id=${requestId} zipBytes=${bytes.length} thumbnailBytes=${thumbnail?.bytes.length || 0}`);\n    const script = await saveScript(bytes, { name, description, author, passwordProtected: Boolean(password), passwordHash }, thumbnail);\n    console.info(`[FX Project] storage saved id=${requestId} scriptId=${script.id}`);
+    console.info(`[FX Project] validating complete id=${requestId} zipBytes=${bytes.length} thumbnailBytes=${thumbnail?.bytes.length || 0}`);
+    const script = await saveScript(bytes, { name, description, author, passwordProtected: Boolean(password), passwordHash }, thumbnail);
+    console.info(`[FX Project] storage saved id=${requestId} scriptId=${script.id}`);
     // Upload must succeed even if Telegram is temporarily unavailable.
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
     const scriptUrl = siteUrl ? `${siteUrl}/scripts/${script.id}` : `/scripts/${script.id}`;
