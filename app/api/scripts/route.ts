@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // ZIP local-file, empty-archive, or spanning signature. This is a format check, not malware scanning.
     const sig = bytes.subarray(0, 4).toString('hex');
     if (!['504b0304', '504b0506', '504b0708'].includes(sig)) return jsonError('Isi file tidak terlihat seperti ZIP yang valid.');
-    let thumbnail: { bytes: Buffer; type: string; extension: string } | undefined;
+    let thumbnail: { bytes: Buffer; type: string; extension: string; url?: string } | undefined;
     if (thumbnailFile instanceof File && thumbnailFile.size > 0) {
       if (thumbnailFile.size > 300_000) {
         return NextResponse.json({ error: 'Ukuran thumbnail maksimal 300 KB.', requestId }, { status: 400 });
