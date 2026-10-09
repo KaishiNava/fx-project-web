@@ -40,11 +40,31 @@ export async function POST(request: NextRequest) {
     if (!['504b0304', '504b0506', '504b0708'].includes(sig)) return jsonError('Isi file tidak terlihat seperti ZIP yang valid.');
     let thumbnail: { bytes: Buffer; type: string; extension: string } | undefined;
     if (thumbnailFile instanceof File && thumbnailFile.size > 0) {
-      const allowedTypes: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-      const extension = allowedTypes[thumbnailFile.type];
-      if (!extension) return jsonError('Thumbnail harus JPG, PNG, atau WEBP.');
-      if (thumbnailFile.size > 300_000) return NextResponse.json({ error: 'Ukuran thumbnail maksimal 300 KB agar request tidak melewati batas Vercel.', requestId }, { status: 400 });
-      thumbnail = { bytes: Buffer.from(await thumbnailFile.arrayBuffer()), type: thumbnailFile.type, extension };
+      if (thumbnailFile.size > 300_000) {
+        return NextResponse.json({ error: 'Ukuran thumbnail maksimal 300 KB.', requestId }, { status: 400 });
+      }
+
+      const thumbnailBytes = Buffer.from(await thumbnailFile.arrayBuffer());
+      // Jangan bergantung hanya pada MIME type dari browser/Android; beberapa picker mengirim MIME kosong atau tidak standar.
+      const isJpeg = thumbnailBytes.length >= 3 &&
+        thumbnailBytes[0] === 0xff && thumbnailBytes[1] === 0xd8 && thumbnailBytes[2] === 0xff;
+      const isPng = thumbnailBytes.length >= 8 &&
+        thumbnailBytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      const isWebp = thumbnailBytes.length >= 12 &&
+        thumbnailBytes.toString('ascii', 0, 4) === 'RIFF' &&
+        thumbnailBytes.toString('ascii', 8, 12) === 'WEBP';
+
+      let extension: string;
+      let type: string;
+      if (isJpeg) { extension = 'jpg'; type = 'image/jpeg'; }
+      else if (isPng) { extension = 'png'; type = 'image/png'; }
+      else if (isWebp) { extension = 'webp'; type = 'image/webp'; }
+      else {
+        console.warn(`[FX Project] invalid thumbnail signature id=${requestId} name=${thumbnailFile.name} type=${thumbnailFile.type} bytes=${thumbnailBytes.length}`);
+        return NextResponse.json({ error: 'Thumbnail tidak terbaca sebagai JPG, PNG, atau WEBP yang valid. Pilih ulang gambar asli.', requestId }, { status: 400 });
+      }
+      thumbnail = { bytes: thumbnailBytes, type, extension };
+      console.info(`[FX Project] thumbnail validated id=${requestId} type=${type} bytes=${thumbnailBytes.length}`);
     }
     const passwordHash = password ? await bcrypt.hash(password, 12) : null;
     console.info(`[FX Project] validating complete id=${requestId} zipBytes=${bytes.length} thumbnailBytes=${thumbnail?.bytes.length || 0}`);
@@ -74,5 +94,5 @@ export async function POST(request: NextRequest) {
     }
     catch (telegramError) { console.error('[FX Project] Telegram upload notification failed:', telegramError instanceof Error ? telegramError.message : 'unknown error'); }
     return NextResponse.json({ script: toPublicScript(script) }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) { return jsonError(safeError(error), 500); }
+  } catch (error) { console.error(`[FX Project] upload failed id=${requestId}`, error); return NextResponse.json({ error: safeError(error), requestId }, { status: 500 }); }
 }

@@ -82,13 +82,22 @@ export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' |
   const id = crypto.randomBytes(6).toString('hex');
   const filePath = `scripts/${id}.zip`;
   const zipBody = { message: `FX Project: upload ${id}`, content: file.toString('base64'), branch: c.branch };
+  console.info(`[FX Project] storage uploading ZIP id=${id} bytes=${file.length}`);
   await github(filePath, { method: 'PUT', body: JSON.stringify(zipBody) });
+  console.info(`[FX Project] storage ZIP uploaded id=${id}`);
   let thumbnailPath: string | null = null;
   let thumbnailType: string | null = null;
   if (thumbnail) {
     thumbnailPath = `thumbnails/${id}.${thumbnail.extension}`;
     thumbnailType = thumbnail.type;
-    await github(thumbnailPath, { method: 'PUT', body: JSON.stringify({ message: `FX Project: thumbnail ${id}`, content: thumbnail.bytes.toString('base64'), branch: c.branch }) });
+    console.info(`[FX Project] storage uploading thumbnail id=${id} path=${thumbnailPath} bytes=${thumbnail.bytes.length} type=${thumbnail.type}`);
+    try {
+      await github(thumbnailPath, { method: 'PUT', body: JSON.stringify({ message: `FX Project: thumbnail ${id}`, content: thumbnail.bytes.toString('base64'), branch: c.branch }) });
+      console.info(`[FX Project] storage thumbnail uploaded id=${id}`);
+    } catch (error) {
+      console.error(`[FX Project] storage thumbnail upload failed id=${id}`, error);
+      throw error;
+    }
   }
   const record: ScriptRecord = { ...meta, id, file: filePath, thumbnailPath, thumbnailType, size: file.length, downloads: 0, createdAt: new Date().toISOString() };
   try {
