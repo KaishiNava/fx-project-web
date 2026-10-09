@@ -4,7 +4,7 @@ import { listScripts, saveScript } from '@/lib/github-storage';
 import { toPublicScript } from '@/lib/types';
 import { jsonError, safeError } from '@/lib/http';
 import { allowRequest } from '@/lib/ratelimit';
-import { escapeHtml, sendTelegramMessage } from '@/lib/telegram';
+import { escapeHtml, sendTelegramMessage, sendTelegramPhoto } from '@/lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (!allowRequest(`upload:${forwarded}`, 5, 60_000)) return jsonError('Terlalu banyak upload dari koneksi ini. Coba lagi satu menit lagi.', 429);
   try {
     const form = await request.formData();
-    const file = form.get('file'); const name = String(form.get('name') || '').trim(); const description = String(form.get('description') || '').trim(); const author = String(form.get('author') || '').trim(); const password = String(form.get('password') || '');
+    const file = form.get('file'); const thumbnailFile = form.get('thumbnail'); const name = String(form.get('name') || '').trim(); const description = String(form.get('description') || '').trim(); const author = String(form.get('author') || '').trim(); const password = String(form.get('password') || '');
     if (!(file instanceof File)) return jsonError('File ZIP wajib dipilih.');
     if (!name || name.length < 2 || name.length > 70) return jsonError('Nama script harus 2–70 karakter.');
     if (description.length > 500) return jsonError('Deskripsi maksimal 500 karakter.');
@@ -30,8 +30,16 @@ export async function POST(request: NextRequest) {
     // ZIP local-file, empty-archive, or spanning signature. This is a format check, not malware scanning.
     const sig = bytes.subarray(0, 4).toString('hex');
     if (!['504b0304', '504b0506', '504b0708'].includes(sig)) return jsonError('Isi file tidak terlihat seperti ZIP yang valid.');
+    let thumbnail: { bytes: Buffer; type: string; extension: string } | undefined;
+    if (thumbnailFile instanceof File && thumbnailFile.size > 0) {
+      const allowedTypes: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const extension = allowedTypes[thumbnailFile.type];
+      if (!extension) return jsonError('Thumbnail harus JPG, PNG, atau WEBP.');
+      if (thumbnailFile.size > 700_000) return jsonError('Ukuran thumbnail maksimal 700 KB.');
+      thumbnail = { bytes: Buffer.from(await thumbnailFile.arrayBuffer()), type: thumbnailFile.type, extension };
+    }
     const passwordHash = password ? await bcrypt.hash(password, 12) : null;
-    const script = await saveScript(bytes, { name, description, author, passwordProtected: Boolean(password), passwordHash });
+    const script = await saveScript(bytes, { name, description, author, passwordProtected: Boolean(password), passwordHash }, thumbnail);
     // Upload must succeed even if Telegram is temporarily unavailable.
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
     const scriptUrl = siteUrl ? `${siteUrl}/scripts/${script.id}` : `/scripts/${script.id}`;
@@ -46,9 +54,14 @@ export async function POST(request: NextRequest) {
       `<b>Password download:</b> ${script.passwordProtected ? 'YA (disimpan sebagai hash; password asli tidak dikirim)' : 'TIDAK'}`,
       `<b>Jumlah download:</b> ${script.downloads}`,
       `<b>Waktu upload:</b> ${escapeHtml(script.createdAt)}`,
+      `<b>Thumbnail:</b> ${script.thumbnailPath ? 'Tersedia' : 'Tidak ada'}`,
       `<b>Link:</b> ${escapeHtml(scriptUrl)}`
     ].join('\n');
-    try { await sendTelegramMessage(notification); }
+    try {
+      const thumbUrl = script.thumbnailPath && siteUrl ? `${siteUrl}/api/scripts/${script.id}/thumbnail` : '';
+      if (thumbUrl) await sendTelegramPhoto(thumbUrl, notification.slice(0, 1000));
+      else await sendTelegramMessage(notification);
+    }
     catch (telegramError) { console.error('[FX Project] Telegram upload notification failed:', telegramError instanceof Error ? telegramError.message : 'unknown error'); }
     return NextResponse.json({ script: toPublicScript(script) }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return jsonError(safeError(error), 500); }

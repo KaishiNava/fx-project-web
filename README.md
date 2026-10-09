@@ -67,3 +67,9 @@ Setup:
 Security note: notifications intentionally **never include the original download password**. The password is stored as a bcrypt hash, which cannot be used to recover the original password, and sending secrets to chat history would expose them to anyone with access to that chat. The notification only tells the admin whether password protection is enabled. Do not place bot tokens in client-side code or variables prefixed with `NEXT_PUBLIC_`.
 
 The Telegram notification is best-effort: if Telegram is temporarily unavailable, an upload that has already been saved will still succeed. The in-memory rate limiter is also only a light per-instance guard; configure a persistent rate limit/WAF before opening the public upload/report forms widely.
+
+## Thumbnail script
+Uploader dapat menambahkan thumbnail opsional JPG, PNG, atau WEBP (maksimal 700 KB). Gambar disimpan di repository storage pada folder `thumbnails/`, lalu ditampilkan pada kartu library/detail melalui endpoint thumbnail website. Jika `NEXT_PUBLIC_SITE_URL` benar, notifikasi upload Telegram menggunakan foto thumbnail sebagai cover; jika tidak ada thumbnail, bot mengirim pesan teks.
+
+## Telegram
+Laporan dan upload memakai `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`. Pesan upload memuat ID, nama, author, deskripsi, ukuran, status proteksi password (bukan password aslinya), waktu, dan tautan. Password asli tidak pernah dikirim ke Telegram.

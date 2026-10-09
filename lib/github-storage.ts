@@ -77,13 +77,20 @@ export async function getScript(id: string): Promise<ScriptRecord | null> {
   return (await listScripts()).find(script => script.id === id) || null;
 }
 
-export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' | 'description' | 'author' | 'passwordProtected' | 'passwordHash'>): Promise<ScriptRecord> {
+export async function saveScript(file: Buffer, meta: Pick<ScriptRecord, 'name' | 'description' | 'author' | 'passwordProtected' | 'passwordHash'>, thumbnail?: { bytes: Buffer; type: string; extension: string }): Promise<ScriptRecord> {
   const c = config();
   const id = crypto.randomBytes(6).toString('hex');
   const filePath = `scripts/${id}.zip`;
   const zipBody = { message: `FX Project: upload ${id}`, content: file.toString('base64'), branch: c.branch };
   await github(filePath, { method: 'PUT', body: JSON.stringify(zipBody) });
-  const record: ScriptRecord = { ...meta, id, file: filePath, size: file.length, downloads: 0, createdAt: new Date().toISOString() };
+  let thumbnailPath: string | null = null;
+  let thumbnailType: string | null = null;
+  if (thumbnail) {
+    thumbnailPath = `thumbnails/${id}.${thumbnail.extension}`;
+    thumbnailType = thumbnail.type;
+    await github(thumbnailPath, { method: 'PUT', body: JSON.stringify({ message: `FX Project: thumbnail ${id}`, content: thumbnail.bytes.toString('base64'), branch: c.branch }) });
+  }
+  const record: ScriptRecord = { ...meta, id, file: filePath, thumbnailPath, thumbnailType, size: file.length, downloads: 0, createdAt: new Date().toISOString() };
   try {
     await updateMetadata(records => [record, ...records], `FX Project: register ${id}`);
   } catch (error) {
@@ -112,4 +119,20 @@ export async function incrementDownloads(id: string): Promise<number> {
     return { ...record, downloads: result };
   }), `FX Project: download ${id}`);
   return result;
+}
+
+export async function getThumbnail(path: string): Promise<{ bytes: Buffer; type: string } | null> {
+  if (!/^thumbnails\/[a-f0-9]{12}\.(jpg|png|webp)$/.test(path)) throw new Error('Path thumbnail tidak valid.');
+  const file = await github(path) as GitHubContent;
+  if (file.content) {
+    const ext = path.split('.').pop();
+    const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    return { bytes: Buffer.from(file.content, 'base64'), type };
+  }
+  if (!file.download_url) return null;
+  const c = config();
+  const response = await fetch(file.download_url, { headers: { Authorization: `Bearer ${c.token}`, Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
+  if (!response.ok) return null;
+  const ext = path.split('.').pop();
+  return { bytes: Buffer.from(await response.arrayBuffer()), type: ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg' };
 }

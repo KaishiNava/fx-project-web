@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       `<b>Target / Script ID:</b> ${escapeHtml(target || 'Tidak diisi')}`,
       `<b>Kontak pelapor:</b> ${escapeHtml(contact || 'Tidak diisi')}`,
       `<b>Detail:</b> ${escapeHtml(message)}`,
-      `<b>Waktu:</b> ${escapeHtml(new Date().toISOString())}`,
+      `<b>Waktu:</b> ${escapeHtml(new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'long', timeZone: 'Asia/Jakarta' }).format(new Date()))} WIB`,
       `<b>IP:</b> tidak dicatat di notifikasi`,
       `<b>Website:</b> ${escapeHtml(site)}`
     ].join('\n');
